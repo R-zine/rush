@@ -1,0 +1,9 @@
+[package]
+name = "rush"
+version = "0.1.0"
+edition = "2024"
+description = "A tiny learning shell written in Rust"
+license = "MIT"
+
+[dependencies]
+crossterm = "0.29"
