@@ -33,6 +33,13 @@ The implementation is organized as a simple loop:
 4. Handle built-in commands in the current process.
 5. Start other programs with `std::process::Command`.
 
+The code follows those responsibilities across focused modules:
+
+- `parser.rs` converts input text into parsed commands.
+- `executor.rs` runs built-ins and external programs.
+- `history.rs` stores commands and manages Up/Down navigation.
+- `shell.rs` handles terminal input and coordinates the modules.
+
 Up recalls older commands, Down moves forward again, and the original draft is
 restored at the end. Consecutive duplicate commands are not stored.
 
@@ -41,8 +48,6 @@ Suggested next exercises:
 - Support `>` output redirection and `<` input redirection.
 - Add pipelines such as `echo hello | findstr hello` on Windows.
 - Add environment-variable expansion.
-- Split the parser and executor into separate modules.
-- Add integration tests that run the binary with scripted input.
 
 ## Verify
 

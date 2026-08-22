@@ -1,4 +1,6 @@
+mod executor;
 mod history;
+mod parser;
 mod shell;
 
 fn main() {

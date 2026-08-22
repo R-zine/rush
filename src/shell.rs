@@ -1,9 +1,10 @@
+use crate::executor::{self, ExecutionResult};
 use crate::history::History;
+use crate::parser::parse_command;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use std::env;
 use std::io::{self, IsTerminal, Write};
-use std::process::Command;
 
 pub fn run() -> io::Result<()> {
     println!("rush - a tiny learning shell");
@@ -77,11 +78,11 @@ fn process_line(line: &str) -> io::Result<bool> {
         }
     };
 
-    match execute_builtin(&command)? {
-        BuiltinResult::Exit => Ok(true),
-        BuiltinResult::Handled => Ok(false),
-        BuiltinResult::NotBuiltin => {
-            run_external(&command);
+    match executor::execute(&command)? {
+        ExecutionResult::Exit => Ok(true),
+        ExecutionResult::Handled => Ok(false),
+        ExecutionResult::NotBuiltin => {
+            executor::execute_external(&command);
             Ok(false)
         }
     }
@@ -157,127 +158,11 @@ fn print_prompt() -> io::Result<()> {
     io::stdout().flush()
 }
 
-enum BuiltinResult {
-    Handled,
-    Exit,
-    NotBuiltin,
-}
-
-fn execute_builtin(command: &ParsedCommand) -> io::Result<BuiltinResult> {
-    match command.program.as_str() {
-        "cd" => {
-            let destination = command.args.first().map_or_else(
-                || env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")),
-                |path| Some(path.into()),
-            );
-
-            match destination {
-                Some(path) => {
-                    if let Err(error) = env::set_current_dir(path) {
-                        eprintln!("rush: cd: {error}");
-                    }
-                }
-                None => eprintln!("rush: cd: home directory is not set"),
-            }
-        }
-        "exit" | "quit" => return Ok(BuiltinResult::Exit),
-        "help" => print_help(),
-        "pwd" => println!("{}", env::current_dir()?.display()),
-        "echo" => println!("{}", command.args.join(" ")),
-        _ => return Ok(BuiltinResult::NotBuiltin),
-    }
-
-    Ok(BuiltinResult::Handled)
-}
-
-fn print_help() {
-    println!("Built-ins:");
-    println!("  cd [DIR]  change directory (defaults to your home directory)");
-    println!("  echo ...  print arguments");
-    println!("  exit      leave rush");
-    println!("  help      show this message");
-    println!("  pwd       print the working directory");
-}
-
-fn run_external(command: &ParsedCommand) {
-    match Command::new(&command.program).args(&command.args).status() {
-        Ok(status) if !status.success() => {
-            eprintln!("rush: process exited with {status}");
-        }
-        Ok(_) => {}
-        Err(error) => eprintln!("rush: {}: {error}", command.program),
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct ParsedCommand {
-    program: String,
-    args: Vec<String>,
-}
-
-fn parse_command(line: &str) -> Result<Option<ParsedCommand>, &'static str> {
-    let mut words = Vec::new();
-    let mut current = String::new();
-    let mut quote = None;
-    let mut escaped = false;
-
-    for character in line.chars() {
-        if escaped {
-            current.push(character);
-            escaped = false;
-            continue;
-        }
-
-        match (quote, character) {
-            (Some('"'), '\\') | (None, '\\') => escaped = true,
-            (Some(active), character) if active == character => quote = None,
-            (None, '\'') | (None, '"') => quote = Some(character),
-            (None, character) if character.is_whitespace() => {
-                if !current.is_empty() {
-                    words.push(std::mem::take(&mut current));
-                }
-            }
-            (_, character) => current.push(character),
-        }
-    }
-
-    if escaped || quote.is_some() {
-        return Err("unterminated quote or escape");
-    }
-    if !current.is_empty() {
-        words.push(current);
-    }
-
-    Ok(words.split_first().map(|(program, args)| ParsedCommand {
-        program: program.clone(),
-        args: args.to_vec(),
-    }))
-}
-
 #[cfg(test)]
 mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-    use super::{ParsedCommand, parse_command, should_process_key_event};
-
-    #[test]
-    fn parses_quoted_arguments() {
-        assert_eq!(
-            parse_command(r#"echo "hello world" 'from rush'"#),
-            Ok(Some(ParsedCommand {
-                program: "echo".into(),
-                args: vec!["hello world".into(), "from rush".into()],
-            }))
-        );
-    }
-
-    #[test]
-    fn rejects_unterminated_quotes() {
-        assert_eq!(
-            parse_command("echo \"unfinished"),
-            Err("unterminated quote or escape")
-        );
-    }
+    use super::should_process_key_event;
 
     #[test]
     fn ignores_key_release_events() {
