@@ -9,6 +9,7 @@ pub fn parse_command(line: &str) -> Result<Option<ParsedCommand>, &'static str> 
     let mut current = String::new();
     let mut quote = None;
     let mut escaped = false;
+    let mut token_started = false;
 
     for character in line.chars() {
         if escaped {
@@ -18,22 +19,32 @@ pub fn parse_command(line: &str) -> Result<Option<ParsedCommand>, &'static str> 
         }
 
         match (quote, character) {
-            (Some('"'), '\\') | (None, '\\') => escaped = true,
+            (Some('"'), '\\') | (None, '\\') => {
+                escaped = true;
+                token_started = true;
+            }
             (Some(active), character) if active == character => quote = None,
-            (None, '\'') | (None, '"') => quote = Some(character),
+            (None, '\'') | (None, '"') => {
+                quote = Some(character);
+                token_started = true;
+            }
             (None, character) if character.is_whitespace() => {
-                if !current.is_empty() {
+                if token_started {
                     words.push(std::mem::take(&mut current));
+                    token_started = false;
                 }
             }
-            (_, character) => current.push(character),
+            (_, character) => {
+                current.push(character);
+                token_started = true;
+            }
         }
     }
 
     if escaped || quote.is_some() {
         return Err("unterminated quote or escape");
     }
-    if !current.is_empty() {
+    if token_started {
         words.push(current);
     }
 
@@ -59,9 +70,66 @@ mod tests {
     }
 
     #[test]
+    fn preserves_empty_quoted_arguments() {
+        assert_eq!(
+            parse_command(r#"echo before "" '' after"#),
+            Ok(Some(ParsedCommand {
+                program: "echo".into(),
+                args: vec!["before".into(), "".into(), "".into(), "after".into()],
+            }))
+        );
+    }
+
+    #[test]
+    fn concatenates_quoted_and_unquoted_segments() {
+        assert_eq!(
+            parse_command(r#"echo one" two" "three"four''"#),
+            Ok(Some(ParsedCommand {
+                program: "echo".into(),
+                args: vec!["one two".into(), "threefour".into()],
+            }))
+        );
+    }
+
+    #[test]
+    fn parses_backslash_escapes() {
+        assert_eq!(
+            parse_command(r#"echo escaped\ space "quoted\"value" 'literal\value'"#),
+            Ok(Some(ParsedCommand {
+                program: "echo".into(),
+                args: vec![
+                    "escaped space".into(),
+                    "quoted\"value".into(),
+                    "literal\\value".into(),
+                ],
+            }))
+        );
+    }
+
+    #[test]
+    fn ignores_separator_whitespace() {
+        assert_eq!(
+            parse_command("  echo\tvalue  "),
+            Ok(Some(ParsedCommand {
+                program: "echo".into(),
+                args: vec!["value".into()],
+            }))
+        );
+        assert_eq!(parse_command(" \t "), Ok(None));
+    }
+
+    #[test]
     fn rejects_unterminated_quotes() {
         assert_eq!(
             parse_command("echo \"unfinished"),
+            Err("unterminated quote or escape")
+        );
+    }
+
+    #[test]
+    fn rejects_unterminated_escape() {
+        assert_eq!(
+            parse_command("echo unfinished\\"),
             Err("unterminated quote or escape")
         );
     }

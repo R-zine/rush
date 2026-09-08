@@ -23,6 +23,9 @@ In an interactive terminal, use Up and Down to navigate command history.
 Backspace edits the current line, Ctrl-C cancels it, and Ctrl-D exits when the
 line is empty. History is kept in memory for the current session.
 
+When running non-interactively, `rush` omits the banner and prompts so its
+command output can be redirected or consumed by another program.
+
 ## What it teaches
 
 The implementation is organized as a simple loop:
@@ -43,16 +46,22 @@ The code follows those responsibilities across focused modules:
 Up recalls older commands, Down moves forward again, and the original draft is
 restored at the end. Consecutive duplicate commands are not stored.
 
-Suggested next exercises:
-
-- Support `>` output redirection and `<` input redirection.
-- Add pipelines such as `echo hello | findstr hello` on Windows.
-- Add environment-variable expansion.
-
 ## Verify
 
 ```text
-cargo fmt --check
-cargo test
-cargo clippy -- -D warnings
+cargo fmt --all -- --check
+cargo test --all-targets --all-features --locked
+cargo clippy --all-targets --all-features --locked -- -D warnings
 ```
+
+## Pre-commit checks
+
+Enable the repository's pre-commit hook once after cloning:
+
+```text
+git config core.hooksPath .githooks
+```
+
+Every commit will then run the formatting, test, and Clippy checks above, plus
+Git's staged-whitespace validation. Bypass the hook only when necessary with
+`git commit --no-verify`.

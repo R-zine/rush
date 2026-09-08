@@ -12,6 +12,7 @@ impl History {
 
     pub fn add(&mut self, command: &str) {
         if command.is_empty() {
+            self.reset();
             return;
         }
 
@@ -85,5 +86,18 @@ mod tests {
 
         assert_eq!(history.previous(""), "same");
         assert_eq!(history.previous("same"), "same");
+    }
+
+    #[test]
+    fn empty_command_resets_navigation_without_being_stored() {
+        let mut history = History::new();
+        history.add("first");
+        history.add("second");
+
+        assert_eq!(history.previous("cancelled draft"), "second");
+        history.add("");
+
+        assert_eq!(history.previous("new draft"), "second");
+        assert_eq!(history.next("second"), "new draft");
     }
 }
